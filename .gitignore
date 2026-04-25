@@ -1,0 +1,16 @@
+# datasets and outputs
+datasets/
+checkpoints/
+results/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Visdom logs
+.visdom/
+
+# OS
+.DS_Store
+images/
