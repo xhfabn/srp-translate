@@ -251,6 +251,8 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
         net = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, no_antialias=no_antialias, no_antialias_up=no_antialias_up, n_blocks=9, opt=opt)
     elif netG == 'resnet_9blocks_mask':
         net = ResnetGeneratorMask(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, no_antialias=no_antialias, no_antialias_up=no_antialias_up, n_blocks=9, opt=opt)
+    elif netG == 'resnet_9blocks_mask_detail':
+        net = ResnetMaskDetailGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, no_antialias=no_antialias, no_antialias_up=no_antialias_up, n_blocks=9, opt=opt)
     elif netG == 'resnet_6blocks':
         net = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, no_antialias=no_antialias, no_antialias_up=no_antialias_up, n_blocks=6, opt=opt)
     elif netG == 'resnet_4blocks':
@@ -1116,6 +1118,36 @@ class ResnetGeneratorMask(nn.Module):
             """Standard forward"""
             fake = self.model(input)
             return fake
+
+class ResnetMaskDetailGenerator(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False,
+                 n_blocks=6, padding_type='reflect', no_antialias=False, no_antialias_up=False, opt=None):
+        super().__init__()
+        self.detail_scale = getattr(opt, 'detail_scale', 0.1)
+        self.encoder = ResnetEncoder(input_nc, ngf * 4, ngf=ngf, norm_layer=norm_layer,
+                                     use_dropout=use_dropout, n_blocks=n_blocks,
+                                     padding_type=padding_type, no_antialias=no_antialias)
+        self.base_decoder = ResnetDecoder(ngf * 4, output_nc, ngf=ngf, norm_layer=norm_layer,
+                                          use_dropout=use_dropout, n_blocks=0,
+                                          padding_type=padding_type, no_antialias=no_antialias_up)
+        self.detail_decoder = ResnetDecoder(ngf * 4, output_nc, ngf=ngf, norm_layer=norm_layer,
+                                            use_dropout=use_dropout, n_blocks=0,
+                                            padding_type=padding_type, no_antialias=no_antialias_up)
+
+    def forward(self, input, mask=None):
+        feat = self.encoder(input)
+        base = self.base_decoder(feat)
+        residual = self.detail_decoder(feat)
+        if mask is None:
+            fake = base
+            detail = torch.zeros_like(base)
+            gate = torch.zeros_like(base[:, :1])
+        else:
+            gate = mask
+            detail = self.detail_scale * gate * torch.tanh(residual)
+            fake = torch.clamp(base + detail, -1.0, 1.0)
+        return fake, base, residual, gate, detail
+
 
 class ResnetDecoder(nn.Module):
     """Resnet-based decoder that consists of a few Resnet blocks + a few upsampling operations.

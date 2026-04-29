@@ -4,15 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ROMA (Region Similarity Matching) is a PyTorch implementation for unpaired nighttime infrared to daytime visible video translation (ACM MM'22). It is built on top of the [CycleGAN/Pix2Pix](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix) and [CUT](https://github.com/taesungp/contrastive-unpaired-translation) frameworks.
+ROMA (Region Similarity Matching) is a PyTorch research codebase for unpaired nighttime infrared to daytime visible translation, built on top of the CycleGAN/Pix2Pix and CUT codebases. The main workflows in this repository are training (`train.py`) and offline inference (`test.py`); there is no separate package build step.
 
-## Commands
+## Common Commands
 
 ### Training
 
-**Video mode** (two adjacent frames concatenated as input):
+Video mode uses `models/roma_model.py` with `data/unaligned_double_dataset.py`. Each training sample is a single 512x256 image made of two adjacent 256x256 frames concatenated along width.
+
 ```bash
-CUDA_VISIBLE_DEVICES=0 python train.py \
+CUDA_VISIBLE_DEVICES=0 python3 train.py \
   --dataroot /path/to/dataset \
   --name ROMA_name \
   --dataset_mode unaligned_double \
@@ -28,13 +29,15 @@ CUDA_VISIBLE_DEVICES=0 python train.py \
   --lr 0.00001
 ```
 
-**Image mode** (single image input):
+Image mode uses the same ROMA training model with the standard unaligned image dataset.
+
 ```bash
-CUDA_VISIBLE_DEVICES=0 python train.py \
+CUDA_VISIBLE_DEVICES=0 python3 train.py \
   --dataroot /path/to/dataset \
   --name ROMA_name \
   --dataset_mode unaligned \
   --local_nums 64 \
+  --display_env ROMA_env \
   --model roma \
   --side_length 7 \
   --lambda_spatial 5.0 \
@@ -43,9 +46,12 @@ CUDA_VISIBLE_DEVICES=0 python train.py \
   --lr 0.00001
 ```
 
-### Testing / Inference
+The checked-in script examples are `scripts/train.sh` and `scripts/test.sh`.
+
+### Inference
+
 ```bash
-CUDA_VISIBLE_DEVICES=0 python test.py \
+CUDA_VISIBLE_DEVICES=0 python3 test.py \
   --dataroot /path/to/test_dataset \
   --checkpoints_dir ./checkpoints \
   --name experiment_name \
@@ -54,48 +60,83 @@ CUDA_VISIBLE_DEVICES=0 python test.py \
   --epoch latest
 ```
 
-Outputs are saved under `./results/<name>/`.
+Inference writes HTML and images under `./results/<name>/<phase>_<epoch>/`.
 
-## Dataset Structure
+### Validation / sanity checks
 
+There is no checked-in lint, formatter, or unit-test configuration in this repository. The lightweight validation command that works without datasets is a Python syntax check:
+
+```bash
+python3 -m py_compile train.py test.py options/*.py data/*.py models/*.py util/*.py
 ```
+
+If you need to inspect all resolved flags for a run, use the entrypoint help after installing the PyTorch dependencies:
+
+```bash
+python3 train.py --help
+python3 test.py --help
+```
+
+## Dataset Layout
+
+Expected dataset layout is driven by `opt.phase`:
+
+```text
 dataset_root/
-  trainA/   # nighttime infrared frames
-  trainB/   # daytime visible frames
+  trainA/
+  trainB/
+  testA/
+  testB/
 ```
 
-For video mode (`unaligned_double`), each sample is a concatenation of two adjacent frames along the width axis. For image mode (`unaligned`), each sample is a single image.
+If `testA`/`testB` do not exist, both `unaligned` and `unaligned_double` datasets fall back to `valA`/`valB` during test mode.
+
+For `unaligned_double`, each image is split into `(A0, A1)` or `(B0, B1)` by cropping left and right 256x256 halves in `data/unaligned_double_dataset.py`. The same random crop/transform is then applied to both frames and both domains so temporal alignment is preserved.
 
 ## Architecture
 
-### Key Design Choices
+### Execution flow
 
-- **Generator (`netG`)**: ResNet-based (default `resnet_9blocks`), translates domain A → domain B.
-- **Discriminator (`netD_ViT`)**: `MLPDiscriminator` applied to token features from a frozen pretrained ViT (`vit_base_patch16_384` from `timm/`). The ViT is loaded with `timm.create_model(..., pretrained=True)` and is never trained.
-- **Cross-Similarity**: Computed across domains using intermediate ViT token features at layers specified by `--atten_layers` (default `1,3,5`). This is the core novelty — matching structural regions cross-domain to guide the generator.
+- `train.py` parses options, creates the dataset through `data.create_dataset(opt)`, creates the model through `models.create_model(opt)`, and runs the epoch/iteration loop.
+- `test.py` uses the same dynamic option system, forces single-threaded batch-1 evaluation, loads the model, and saves results as an HTML gallery.
+- `options/base_options.py` is the root of the CLI system. Parsing order is: base options → train/test options → model-specific `modify_commandline_options` → dataset-specific `modify_commandline_options`.
+- Parsed options are also written to `checkpoints/<experiment>/<phase>_opt.txt`, so changing defaults affects saved experiment metadata.
 
-### Loss Terms
+### Dynamic model and dataset registries
 
-| Flag | Loss | Purpose |
-|---|---|---|
-| `--lambda_global` | Global Structural Consistency | ViT token similarity across full frame |
-| `--lambda_spatial` | Local Structural Consistency | patch-level ViT token similarity |
-| `--lambda_motion` | Temporal Consistency (video only) | consistency between adjacent frames A0/A1 |
-| `--lambda_GAN` | GAN loss | standard adversarial loss |
+This codebase relies on name-based lookup rather than a static registry:
 
-### Options System
+- `models/__init__.py` resolves `--model roma` to `models/roma_model.py` and `ROMAModel`.
+- `data/__init__.py` resolves `--dataset_mode unaligned_double` to `data/unaligned_double_dataset.py` and `UnalignedDoubleDataset`.
 
-Options are resolved dynamically via `argparse` in `options/`. Each model class implements `modify_commandline_options(parser, is_train)` to inject its own flags. The resolution order is: `base_options.py` → `train_options.py` / `test_options.py` → model-specific options → dataset-specific options.
+When adding a new model or dataset, the filename and class name must follow the existing `[name]_model.py` / `[name]_dataset.py` convention or the loader will fail.
 
-Key global flags: `--checkpoints_dir` (default `./checkpoints`), `--gpu_ids`, `--batch_size`, `--load_size` / `--crop_size`.
+### ROMA-specific model design
 
-### Model Files
+The main ROMA logic lives in `models/roma_model.py`:
 
-- `models/roma_model.py` — main training model (video, dual-frame input)
-- `models/roma_single_model.py` — inference-only model (single frame)
-- `models/networks.py` — generator, discriminator, and `MLPDiscriminator` definitions
-- `models/patchnce.py` — PatchNCE loss (inherited from CUT)
+- `netG` is the image translation generator built through `models/networks.py`.
+- `netD_ViT` is an `MLPDiscriminator` that operates on token features rather than raw pixels.
+- `netPreViT` is a frozen pretrained `vit_base_patch16_384` loaded from the vendored `timm/` copy and used only as a feature extractor.
+- Training generates `fake_B0` and `fake_B1` from adjacent infrared frames, extracts multi-layer ViT tokens for real and fake images, and combines adversarial loss with cross-domain structural losses.
 
-### `timm/`
+Important losses and switches:
 
-A vendored local copy of `pytorch-image-models`. The ViT (`vit_base_patch16_384`) is used as a frozen feature extractor — modifications here affect discriminator feature extraction.
+- `--lambda_GAN`: adversarial loss on ViT-token features.
+- `--lambda_global`: global structural consistency.
+- `--lambda_spatial`: local structural consistency using sampled token neighborhoods.
+- `--lambda_motion`: temporal consistency between adjacent frames; only meaningful for the video path.
+- `--atten_layers`: selects which ViT block outputs participate in similarity computation.
+- `--which_D_layer`: selects which extracted ViT layer is routed into the MLP discriminator.
+
+`models/roma_single_model.py` is the single-frame variant used for image-style input and inference. It keeps the same frozen-ViT idea but operates on one frame instead of adjacent pairs and does not use the motion loss path.
+
+### Shared framework pieces
+
+- `models/base_model.py` owns checkpoint loading/saving, scheduler setup, DataParallel wrapping, and the train/test interface expected by all models.
+- `models/networks.py` contains generator/discriminator builders, GAN losses, schedulers, and the `MLPDiscriminator` used by ROMA.
+- `util/visualizer.py` handles both Visdom live displays and HTML snapshot export. Training can create `checkpoints/<name>/web/` and `loss_log.txt`; test-time export goes through `util/html.py` into `results/`.
+
+### Vendored dependencies
+
+`timm/` is vendored into the repository and is part of the runtime, not just a third-party snapshot. Changes there can alter the frozen ViT feature extraction path used by ROMA.
