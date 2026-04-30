@@ -1,0 +1,9 @@
+========================================================
+ 全场景并行训练 (roma_single)
+ 场景数: 5，GPU=0 (RTX 3090, 49GB)
+ Checkpoints: /root/srp-translate/roma/checkpoints/roma_single/<scene>/
+ 开始时间: 2026-04-30 09:33:05
+========================================================
+[启动] IRVI_single_monitor
+       数据=/root/autodl-tmp/IRVI/single/rooftop_total
+       日志=/root/srp-translate/roma/logs/roma_single/IRVI_single_monitor.log

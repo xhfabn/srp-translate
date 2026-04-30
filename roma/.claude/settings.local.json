@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//root/autodl-tmp/IRVI/single/**)",
+      "Read(//root/autodl-tmp/InfraredCity-Lite/Single/**)",
+      "Bash(nvidia-smi *)"
+    ]
+  }
+}

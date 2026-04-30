@@ -29,9 +29,9 @@ set -e
 
 DATAROOT="${1:?请提供数据集路径，例如: bash scripts/train_mask_detail.sh /data/infrared}"
 MODE="${2:-video}"   # video | image，默认 video
+NAME="${3:-roma_mask_detail_$(date +%Y%m%d_%H%M)}"  # 第三个参数可指定实验名，避免并行时撞名
 
 GPU="0"
-NAME="roma_mask_detail_$(date +%Y%m%d_%H%M)"
 CHECKPOINTS_DIR="./checkpoints"
 
 # 公共参数

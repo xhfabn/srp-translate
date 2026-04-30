@@ -1,0 +1,34 @@
+========================================================
+ 全场景并行训练 (roma_single)
+ 场景数: 5，GPU=0 (RTX 3090, 49GB)
+ Checkpoints: /root/srp-translate/roma/checkpoints/roma_single/<scene>/
+ 开始时间: 2026-04-30 16:25:00
+========================================================
+[启动] IRVI_single_monitor
+       数据=/root/dataset_archives/IRVI/single/rooftop_total
+       日志=/root/srp-translate/roma/logs/roma_single/IRVI_single_monitor.log
+[启动] IRVI_single_traffic
+       数据=/root/dataset_archives/IRVI/single/traffic
+       日志=/root/srp-translate/roma/logs/roma_single/IRVI_single_traffic.log
+[启动] ICL_single_monitor
+       数据=/root/dataset_archives/InfraredCity-Lite/Single/Monitor_std
+       日志=/root/srp-translate/roma/logs/roma_single/ICL_single_monitor.log
+[启动] ICL_single_traffic_city
+       数据=/root/dataset_archives/InfraredCity-Lite/Single/Traffic/City_std
+       日志=/root/srp-translate/roma/logs/roma_single/ICL_single_traffic_city.log
+[启动] ICL_single_traffic_hwy
+       数据=/root/dataset_archives/InfraredCity-Lite/Single/Traffic/Highway_std
+       日志=/root/srp-translate/roma/logs/roma_single/ICL_single_traffic_hwy.log
+
+所有场景已后台启动，PID: 6064 6142 6217 6290 6377
+
+查看各场景进度：
+  tail -f /root/srp-translate/roma/logs/roma_single/IRVI_single_monitor.log
+  tail -f /root/srp-translate/roma/logs/roma_single/IRVI_single_traffic.log
+  tail -f /root/srp-translate/roma/logs/roma_single/ICL_single_monitor.log
+  tail -f /root/srp-translate/roma/logs/roma_single/ICL_single_traffic_city.log
+  tail -f /root/srp-translate/roma/logs/roma_single/ICL_single_traffic_hwy.log
+
+查看显存：watch -n5 nvidia-smi
+
+等待所有进程结束...

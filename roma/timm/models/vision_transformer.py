@@ -341,6 +341,7 @@ class VisionTransformer(nn.Module):
             self.head_dist = nn.Linear(self.embed_dim, self.num_classes) if num_classes > 0 else nn.Identity()
 
     def forward_features(self, x, block_layers=[], get_tokens=False, local_id = [], side_length = 7):
+        has_local_id = local_id is not None and len(local_id) > 0
         x = self.patch_embed(x)
         cls_token = self.cls_token.expand(x.shape[0], -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
         if self.dist_token is None:
@@ -349,7 +350,7 @@ class VisionTransformer(nn.Module):
             x = torch.cat((cls_token, self.dist_token.expand(x.shape[0], -1, -1), x), dim=1)
         x = self.pos_drop(x + self.pos_embed)
 
-        if local_id != []:
+        if has_local_id:
             if x.shape[0] != 1:
                 print('Please enter one image at a time!')
             x = x[:,1:,:] # 去除class_token
@@ -404,7 +405,7 @@ class VisionTransformer(nn.Module):
             for block_id, block in enumerate(self.blocks):
                 x = block(x)
                 if block_id in block_layers:
-                    if local_id == []:
+                    if not has_local_id:
                         # print(self.norm)
                         x_list.append(self.norm(x[:,1:,:]))
                     else :
